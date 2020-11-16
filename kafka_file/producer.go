@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	// "bytes"
 
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
 func getNextBlock(fileReader *bufio.Reader) ([]byte, bool) {
-	line, err := fileReader.ReadBytes(byte('\n'))
-	if err != nil && err != io.EOF {
-		fmt.Println(line)
+	line, err := fileReader.Peek(4096)
+	leng, err1 := fileReader.Read(line)
+	// buff := bytes.NewBuffer(line)
+	// fmt.Printf("%v %v\n", err, err1)
+	if err == nil && err != io.EOF  && err1 == nil{
+		fmt.Printf("Sending %v Bytes....\n", leng)
 	} else if err != nil && err == io.EOF {
 		fmt.Println("End of File Reached")
 		return line, true
@@ -26,12 +30,12 @@ func sendToKafka(prod *kafka.Producer, line []byte) {
 		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
 		Value:          line,
 	}, nil)
-	fmt.Println("Sent")
-	prod.Flush(1000)
+	fmt.Printf("Sent %v Bytes\n", len(line))
+	prod.Flush(10)
 }
 
 func main() {
-	fmt.Println("Running")
+	// fmt.Println("Running")
 	file, err := os.Open("data.tsv")
 	p, kafErr := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost:9092"})
 	if err != nil {
@@ -46,8 +50,11 @@ func main() {
 	for {
 		line, eof := getNextBlock(fileReader)
 		if !eof {
-			fmt.Println(string(line))
+			// fmt.Println(string(line))
 			sendToKafka(p, line)
+		} else {
+			sendToKafka(p, line)
+			break
 		}
 	}
 }
