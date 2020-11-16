@@ -1,10 +1,11 @@
 package main
 
 import (
-	"fmt";
-	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka";
-	"bufio";
-	"os";
+	"bufio"
+	"fmt"
+	"os"
+
+	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
 func getFromKafka(cons *kafka.Consumer) (string, bool) {
@@ -37,7 +38,7 @@ func main() {
 	c, kafErr := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": "localhost:9092",
 		"auto.offset.reset": "earliest",
-		"group.id": "myGroup",
+		"group.id":          "myGroup",
 	})
 	if err != nil {
 		fmt.Println("File doesn't exist or can't be created")
@@ -52,7 +53,7 @@ func main() {
 		if success {
 			done := printToFile(file, line)
 			if done {
-				fmt.Println("Wrote to File",line)
+				fmt.Println("Wrote to File", line)
 			} else {
 				break
 			}

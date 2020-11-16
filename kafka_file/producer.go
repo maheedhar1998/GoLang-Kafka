@@ -1,18 +1,19 @@
 package main
 
 import (
-	"fmt";
-	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka";
-	"io";
-	"bufio";
-	"os";
+	"bufio"
+	"fmt"
+	"io"
+	"os"
+
+	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
-func getNextLine(fileReader *bufio.Reader) ([]byte, bool) {
+func getNextBlock(fileReader *bufio.Reader) ([]byte, bool) {
 	line, err := fileReader.ReadBytes(byte('\n'))
 	if err != nil && err != io.EOF {
 		fmt.Println(line)
-	} else if err != nil &&  err == io.EOF {
+	} else if err != nil && err == io.EOF {
 		fmt.Println("End of File Reached")
 		return line, true
 	}
@@ -23,7 +24,7 @@ func sendToKafka(prod *kafka.Producer, line []byte) {
 	topic := "file-transfer"
 	prod.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-		Value: line,
+		Value:          line,
 	}, nil)
 	fmt.Println("Sent")
 	prod.Flush(1000)
@@ -43,8 +44,8 @@ func main() {
 	defer p.Close()
 	defer file.Close()
 	for {
-		line, eof := getNextLine(fileReader)
-		if(!eof) {
+		line, eof := getNextBlock(fileReader)
+		if !eof {
 			fmt.Println(string(line))
 			sendToKafka(p, line)
 		}
