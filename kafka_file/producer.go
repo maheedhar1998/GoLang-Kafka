@@ -5,23 +5,30 @@ import (
 	"fmt"
 	"io"
 	"os"
-	// "bytes"
+	"bytes"
 
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
 func getNextBlock(fileReader *bufio.Reader) ([]byte, bool) {
-	line, err := fileReader.Peek(4096)
-	leng, err1 := fileReader.Read(line)
-	// buff := bytes.NewBuffer(line)
-	// fmt.Printf("%v %v\n", err, err1)
-	if err == nil && err != io.EOF  && err1 == nil{
-		fmt.Printf("Sending %v Bytes....\n", leng)
-	} else if err != nil && err == io.EOF {
-		fmt.Println("End of File Reached")
-		return line, true
+	block := []byte{}
+	buff := bytes.NewBuffer(block)
+	fmt.Println(len(block))
+	numOfLines := 0
+	eof := false
+	for ;numOfLines<10000; numOfLines++ {
+		line, err := fileReader.ReadBytes('\n')
+		if err == nil && err != io.EOF {
+			fmt.Printf("Adding line to Buffer %v\n", string(line[:10]))
+			buff.WriteString(string(line))
+		} else if err != nil && err == io.EOF {
+			fmt.Println("End of File Reached")
+			buff.WriteString(string(line))
+			eof = true
+		}
 	}
-	return line, false
+	fmt.Println(len(buff.Bytes()))
+	return buff.Bytes(), eof
 }
 
 func sendToKafka(prod *kafka.Producer, line []byte) {

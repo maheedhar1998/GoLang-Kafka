@@ -1,16 +1,31 @@
 package main
 
 import (
-	"bufio"
+	"strings"
 	"fmt"
-	"os"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 	"time"
+	"encoding/json"
+	"log"
+	"net/http"
+	"github.com/gorilla/mux"
 )
 
+type artist struct {
+	Number string `json:"nCount"`
+	Name string `json:"name"`
+	Birth string `json:"birth"`
+	Death string `json:"death"`
+	Profession []string `json:"profession"`
+	Titles []string `json:"titles"`
+}
+
+var artists []artist
+
+// Retrieves messages from kafka
 func getFromKafka(cons *kafka.Consumer) (string, bool) {
 	fmt.Println("Reading From Kafka....")
-	tm, tmErr := time.ParseDuration("10s")
+	tm, tmErr := time.ParseDuration("5s")
 	fmt.Println(tmErr)
 	line, err := cons.ReadMessage(tm)
 	fmt.Printf("%v, %T, %v, %T", line, line, err, err)
@@ -22,50 +37,112 @@ func getFromKafka(cons *kafka.Consumer) (string, bool) {
 	}
 }
 
-func printToFile(fileWriter *bufio.Writer, line string) bool {
-	len, err := fileWriter.WriteString(line)
-	if err != nil {
-		fmt.Println("Couldn't write to file", err)
-		return false
-	} else {
-		fmt.Printf("Wrote %v bytes to file\n", len)
-		return true
+// Adds artists to the list
+func addArtists(block string) {
+	lines := strings.Split(block, "\n")
+	for i := 0; i<len(lines); i++ {
+		attr := strings.Split(lines[i], "\t")
+		// fmt.Println(len(attr))
+		if attr[0] == "nconst" {
+			continue
+		} else if len(attr) == 6 {
+			artists = append(artists, artist{
+				Number: attr[0],
+				Name: attr[1],
+				Birth: attr[2],
+				Death: attr[3],
+				Profession: strings.Split(attr[4], ","),
+				Titles: strings.Split(attr[5], ",")})
+		}
 	}
 }
 
+// Search Functions
+func searchArtistByName(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	params := mux.Vars(r)
+	var queriedArtists []artist
+	// fmt.Println(params)
+	for _,art := range artists {
+		if(strings.Contains(art.Name, params["name"])) {
+			queriedArtists = append(queriedArtists, art)
+		}
+	}
+	fmt.Println(len(queriedArtists))
+	json.NewEncoder(w).Encode(queriedArtists)
+}
+
+func searchArtistByBirthYear(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	params := mux.Vars(r)
+	var queriedArtists []artist
+	// fmt.Println(params)
+	for _,art := range artists {
+		if(strings.Contains(art.Birth, params["birth"])) {
+			queriedArtists = append(queriedArtists, art)
+		}
+	}
+	fmt.Println(len(queriedArtists))
+	json.NewEncoder(w).Encode(queriedArtists)
+}
+
+func searchArtistByDeathYear(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	params := mux.Vars(r)
+	var queriedArtists []artist
+	// fmt.Println(params)
+	for _,art := range artists {
+		if(strings.Contains(art.Death, params["death"])) {
+			queriedArtists = append(queriedArtists, art)
+		}
+	}
+	fmt.Println(len(queriedArtists))
+	json.NewEncoder(w).Encode(queriedArtists)
+}
+
+func searchArtistByProfession(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	params := mux.Vars(r)
+	var queriedArtists []artist
+	// fmt.Println(params)
+	for _,art := range artists {
+		for i := range art.Profession {
+			if(strings.Contains(art.Profession[i], params["profession"])) {
+				queriedArtists = append(queriedArtists, art)
+			}
+		}
+	}
+	fmt.Println(len(queriedArtists))
+	json.NewEncoder(w).Encode(queriedArtists)
+}
+
 func main() {
-	file, err := os.OpenFile("copiedData.tsv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// file, err = os.Open("copiedData.tsv")
+	// Consumer Init
 	c, kafErr := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": "localhost:9092",
 		"auto.offset.reset": "earliest",
 		"group.id":          "myGroup",
 	})
-	if err != nil {
-		fmt.Println("File doesn't exist or can't be created")
-	}
 	if kafErr != nil {
 		fmt.Println("Consumer wasn't initialized")
 	}
-	fileWriter := bufio.NewWriter(file)
 	c.SubscribeTopics([]string{"file-transfer"}, nil)
-	defer file.Close()
-	defer c.Close()
 	for {
 		line, success := getFromKafka(c)
-		// fmt.Printf("%v\n", success)
 		if success {
-			done := printToFile(fileWriter, line)
-			// fmt.Printf("%v %v\n", success, done)
-			if done {
-				fmt.Println("Wrote to File", line[:10])
-			} else if !done {
-				break
-			}
+			addArtists(line)
 		} else {
-			fileWriter.Flush()
 			break
 		}
+		fmt.Println(len(artists), artists[0])
 	}
-	fileWriter.Flush()
+	c.Close()
+	// Route Handles and Endpoints
+	muxer := mux.NewRouter()
+	muxer.HandleFunc("/search/ByName/{name}", searchArtistByName)
+	muxer.HandleFunc("/search/ByBirth/{birth}", searchArtistByBirthYear)
+	muxer.HandleFunc("/search/ByDeath/{death}", searchArtistByDeathYear)
+	muxer.HandleFunc("/search/ByProfession/{profession}", searchArtistByProfession)
+	// Start Server
+	log.Fatal(http.ListenAndServe(":8180", muxer))
 }
